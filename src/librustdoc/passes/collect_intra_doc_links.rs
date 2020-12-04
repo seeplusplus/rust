@@ -27,7 +27,7 @@ use std::cell::Cell;
 use std::mem;
 use std::ops::Range;
 
-use crate::clean::*;
+// use crate::clean::*;
 use crate::core::DocContext;
 use crate::fold::DocFolder;
 use crate::html::markdown::markdown_links;
@@ -601,62 +601,6 @@ fn resolve_associated_trait_item(
     cx: &DocContext<'_>,
 ) -> Option<(ty::AssocKind, DefId)> {
     let ty = cx.tcx.type_of(did);
-    // First consider automatic impls: `impl From<T> for T`
-    let implicit_impls = crate::clean::get_auto_trait_and_blanket_impls(cx, ty, did);
-    let mut candidates: Vec<_> = implicit_impls
-        .flat_map(|impl_outer| {
-            match impl_outer.inner {
-                ImplItem(impl_) => {
-                    debug!("considering auto or blanket impl for trait {:?}", impl_.trait_);
-                    // Give precedence to methods that were overridden
-                    if !impl_.provided_trait_methods.contains(&*item_name.as_str()) {
-                        let mut items = impl_.items.into_iter().filter_map(|assoc| {
-                            if assoc.name.as_deref() != Some(&*item_name.as_str()) {
-                                return None;
-                            }
-                            let kind = assoc
-                                .inner
-                                .as_assoc_kind()
-                                .expect("inner items for a trait should be associated items");
-                            if kind.namespace() != ns {
-                                return None;
-                            }
-
-                            trace!("considering associated item {:?}", assoc.inner);
-                            // We have a slight issue: normal methods come from `clean` types,
-                            // but provided methods come directly from `tcx`.
-                            // Fortunately, we don't need the whole method, we just need to know
-                            // what kind of associated item it is.
-                            Some((kind, assoc.def_id))
-                        });
-                        let assoc = items.next();
-                        debug_assert_eq!(items.count(), 0);
-                        assoc
-                    } else {
-                        // These are provided methods or default types:
-                        // ```
-                        // trait T {
-                        //   type A = usize;
-                        //   fn has_default() -> A { 0 }
-                        // }
-                        // ```
-                        let trait_ = impl_.trait_.unwrap().def_id().unwrap();
-                        cx.tcx
-                            .associated_items(trait_)
-                            .find_by_name_and_namespace(
-                                cx.tcx,
-                                Ident::with_dummy_span(item_name),
-                                ns,
-                                trait_,
-                            )
-                            .map(|assoc| (assoc.kind, assoc.def_id))
-                    }
-                }
-                _ => panic!("get_impls returned something that wasn't an impl"),
-            }
-        })
-        .collect();
-
     // Next consider explicit impls: `impl MyTrait for MyType`
     // Give precedence to inherent impls.
     if candidates.is_empty() {
